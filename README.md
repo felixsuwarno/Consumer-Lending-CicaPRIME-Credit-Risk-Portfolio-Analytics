@@ -367,43 +367,6 @@ Which individual loans are most likely to default based on borrower, loan, and e
 
 The fully observable window in this dataset is between 2023 to 2024 dataset, so the calculations we make for this business question reflects that.
 
-The rules and definition :
-
-**1) Time Horizon (12 months)**
-- PD is measured over 12 months starting from each loan’s origination date.
-- A loan is eligible only if the dataset contains the full 12-month window.
-- With data ending on 2025-12-31, only loans originated on or before 2024-12-31 are included.
-- Loans originated after 2024-12-31 are excluded because their 12-month outcome cannot be fully observed.
-
-**2) Default Event (Primary Rule: 90+ Days Past Due)**
-- A loan is considered “defaulted” if it reaches 90 or more Days Past Due (DPD) at any time within its 12-month observation window.
-- DPD is defined at the scheduled-installment level:
-  - An installment has a due date from the contractual payment schedule.
-  - If the full due amount is not covered by payments applied to that installment, the installment is considered unpaid.
-  - DPD counts calendar days since the due date.
-  - If an installment is later fully covered, DPD stops on the date it becomes fully covered.
-  - If an installment is never fully covered, DPD is measured up to the end of the 12-month window.
-
-**3) Single Default Trigger (No Double Counting)**
-- The loan default date is the first date the loan crosses 90+ DPD.
-- Once defaulted, the loan stays defaulted for PD counting purposes.
-- Each loan can default at most once.
-
-**4) Measurement Unit (Loan-Level)**
-- Default is measured at the loan level (not at the payment row level and not at the customer level).
-- Each eligible loan contributes:
-  - 1 = defaulted within 12 months
-  - 0 = not defaulted within 12 months
-- A customer with multiple loans can contribute multiple loan observations.
-
-**5) PD Calculation**
-- For any segment (example: risk tier at signup, origination month):
-  PD = (number of eligible loans that default within 12 months) / (total eligible loans)
-
-**Data Quality Notes (Rule-Based Handling)**
-- Loans without required schedule data to compute DPD are excluded from the eligible set (data-quality exception).
-- Early payoff does not count as default unless the loan already crossed 90+ DPD before payoff.
-
 <br>
 
 <p align="center">
@@ -440,69 +403,6 @@ The fully observable window in this dataset is between 2023 to 2024 dataset, so 
 
 <br>
 
-The rules and definition :
-
-**1) Exposure Definition (Principal-Only Rule)**
-- EAD is defined as the remaining principal balance at the moment the loan defaults.
-- Only principal exposure is considered.
-- Interest, fees, penalties, and any other non-principal components are excluded from the calculation.
-
-**2) Default Reference Point (Timing Rule)**
-- EAD is measured on the recorded default_date for each loan.
-- The default_date represents the first date the loan is classified as defaulted under the project’s default definition.
-- Only loans with a non-null default_date are included in EAD measurement.
-
-**3) Principal Paid Before Default**
-- Principal Repaid Before Default is the total sum of paid_principal amounts where payment_date is on or before default_date.
-- Payments occurring after default_date are ignored.
-- If no principal payments were made before default, the value is treated as zero.
-
-**4) EAD Calculation (Loan-Level)**
-- EAD is calculated at the loan level (not at the customer level and not at the payment row level).
-- For each defaulted loan:
-- EAD = Original Principal − Principal Repaid Before Default
-- If the calculation produces a negative value due to data irregularities, EAD is floored at zero.
-- Each defaulted loan contributes one EAD observation.
-
-**5) Measurement Scope (Defaulted Loans Only)**
-- Only loans that default are included in EAD measurement.
-- Non-defaulted loans are excluded because there is no default event to measure exposure against.
-- A customer with multiple defaulted loans contributes multiple EAD observations.
-- Data Scope Notes (Explicit Exclusions)
-
-<br>
-
-The following elements are not included in EAD:
-- Accrued interest
-- Unpaid interest
-- Late fees
-- Penalty charges
-- Service or administrative fees
-- Collection costs
-- Legal expenses
-- Revolving credit exposure adjustments (e.g., undrawn commitment factors) are not applicable in this installment-loan portfolio.
-
-<br>
-
-**SQL methods :**
-- **Filter to defaulted loans:** Select **loan_id** / **customer_id** / **origination_date** fields and **principal** from loans table, keep only rows where **default_date** is not null ( we only care about loans that defaulted ), and derive **origination_month** from **origination_date** using **DATE_TRUNC**.
-- **Attach borrower risk tier:** Left join **customers** table onto the defaulted-loans set by **customer_id** to bring in **risk_tier_at_signup** for segmentation.
-- **Attach payment history:** Left join **payments** onto the loan-level rows by **loan_id** to add **payment_date** and **paid_principal** so payments can be evaluated relative to **default_date**.
-- **Sum principal paid when the loan defaulted:** Group by **loan_id** and sum **paid_principal** only when **payment_date** is on or before **default_date**, treating null **paid_principal** as 0 via COALESCE.
-- **Rebuild the defaulted-loan base:** Select the loan-level fields (including **risk tier** and **principal**) from the loans+customers CTE to create a clean one-row-per-loan spine for the final output.
-- **Join principal-paid back to loans:** Left join the aggregated **principal_paid_on_default** onto the loan-level base by **loan_id** and default missing values to 0 to avoid null math.
-- **Compute principal unpaid at default:** Calculate **principal_unpaid_on_default** as max(**principal** minus **principal_paid_on_default**, 0) and sort by **customer_id** and **loan_id** for readable output.
-- **The output table:** one row per defaulted loan with **customer_id**, **loan_id**, **origination_date**, **origination_month**, **default_date**, **risk_tier_at_signup**, original **principal**, **principal_paid_on_default**, and **principal_unpaid_on_default** (the remaining principal at default under the project’s principal-only EAD definition).
-
-<br>
-
-**Python methods :**
-- **Load loan-level EAD output	:** parse **origination_date**, **origination_month**, and **default_date** as dates.
-- **Summarize EAD by vintage	:** Group by **origination_month** and compute **defaulted_loan_count**, total **principal_unpaid_on_default**, and average **principal_unpaid_on_default**.
-- **Summarize EAD by risk tier	:** Group by **risk_tier_at_signup** and compute **defaulted_loan_count**, total **principal_unpaid_on_default**, and average **principal_unpaid_on_default**.
-
-<br>
-
 <p align="center">
   <img src="Charts/03_2a_ead_by_risk_tier.png" style="width:100%;">
 </p
@@ -531,55 +431,6 @@ The following elements are not included in EAD:
 How severe are losses after recoveries, and how do they vary across segments?
 
 The fully observable window in this dataset is between 2023 to 2024 dataset, so the calculations we make for this business question reflects that.
-
-The rules and definition :
-
-**1) Loss Definition (Principal-Only Loss Rule)**
-  - LGD measures the proportion of principal that is not recovered after default.
-  - Only principal exposure is considered in the loss calculation.
-  - Interest, fees, penalties, and other non-principal components are excluded.
-
-**2) Default Reference Point (Anchor Rule)**
-  - LGD is calculated only for loans with a non-null default_date.
-  - The default_date is the same event used to measure EAD.
-  - LGD uses the EAD already defined in Section 3.2 as the exposure base.
-
-**3) Recoveries After Default**
-  - Recoveries are defined as the total sum of paid_principal amounts where payment_date is strictly after default_date.
-  - Payments on or before default_date are excluded because they are already reflected in EAD.
-  - If no principal payments are received after default, recovery is treated as zero.
-
-**4) LGD Calculation (Loan-Level)**
-  - LGD is calculated at the loan level.
-  - For each defaulted loan:
-  - Loss = EAD − Principal Recovered After Default
-  - LGD = Loss ÷ EAD
-  - If recoveries exceed EAD due to data irregularities, LGD is floored at zero.
-  - If EAD equals zero, the observation is excluded from LGD calculation to avoid division errors.
-  - Each defaulted loan contributes one LGD observation.
-
-**5) Portfolio LGD (Aggregation Rule)**
-  - Portfolio LGD is calculated using a weighted approach.
-  - Portfolio LGD = Total Loss Across Defaulted Loans ÷ Total EAD Across Defaulted Loans.
-  - This ensures larger exposures appropriately influence the portfolio result.
-
-**6) Measurement Scope (Defaulted Loans Only)**
-  - Only loans with a default event are included in LGD measurement.
-  - Non-defaulted loans are excluded because no loss event occurred.
-  - A customer with multiple defaulted loans contributes multiple LGD observations.
-
-<br>
-
-<p align="center">
-  <img src="Charts/03_3a_lgd_by_risk_tier.png" style="width:100%;">
-</p
-
-**Key Insights**
-- Tier C has the highest LGD, which means when C loans default, the bank loses the biggest share of the unpaid money.
-- Tier D is also very high, but it is based on only 4 loans, so the result is unstable and can easily move.
-- Tier A and Tier B have similar LGD levels, both just under 80%, meaning the bank still loses most of the money when these loans default.
-- Tier A has the largest number of defaults (112 loans), so its LGD result is the most reliable and matters the most for total portfolio loss.
-- Overall, all tiers show high LGD, which means recoveries after default are generally low across the portfolio.
 
 <br>
 
