@@ -8,6 +8,12 @@ The analysis evaluates revenue forecasting, budget vs. actual variance, borrower
 
 <br><br>
 
+**➤ Executive Summary:**
+
+CicaPRIME's lending portfolio grew steadily from 2023 through 2025, but growth came with financial predictability challenges. Cash collections fell short of scheduled payments in most months, credit losses exceeded plan and arrived in spikes rather than smoothly, and roughly 60–65% of borrowers did not return for a second loan within 180 days. Credit risk followed expected patterns — higher-risk tiers defaulted more often, and loans that reached 30 or more days past due were reliable early indicators of later defaults. The portfolio is growing, but conservative planning assumptions and early delinquency monitoring are needed to keep losses manageable.
+
+<br><br>
+
 ➤ **Project Goal / Purpose:**  
 
 This project evaluates how a simulated fintech lending portfolio performs over time—examining whether portfolio growth is stable, whether revenue generation is sustainable, and where the business may be exposed to downside risk.
@@ -54,73 +60,35 @@ How risky is the lending portfolio and how well is risk predicted?
   4. **Vintage risk performance** <br> How do loans from different origination months perform by the end of their first year?
   5. **Decision Score Effectiveness** <br> How effectively does the current decision score separate low-risk and high-risk borrowers?
 
-<br><br>
 
-**➤ Executive Summary:**
-
-Key Findings
-- Revenue grew steadily as the lending portfolio expanded.
-- Actual cash collections were below scheduled payments in most months.
-- Credit losses were higher and more volatile than planned.
-- Many borrowers did not return for a second loan within 180 days.
-- Higher-risk tiers and lower decision scores showed higher default rates.
-
-Implications
-- The business is growing, but financial performance is not fully predictable.
-- Cash shortfalls and volatile losses reduce planning reliability.
-- Portfolio value depends partly on a smaller group of stronger borrowers.
-
-Recommendations
-- Monitor 30+ DPD as an early warning sign of rising defaults.
-- Use more conservative assumptions for cash collections and credit losses.
-- Keep using risk tiers and decision scores in underwriting while improving borrower retention and recovery efforts.
 
 <br><br>
 
 **➤ The Dataset**
 
-The raw dataset spans January 2023 through December 2025, and all reporting and conclusions in this project are intentionally scoped to this full three-year period to evaluate portfolio growth, seasonality, underwriting changes, and macro-driven risk cycles, while supporting time-series forecasting, predictive modeling, portfolio risk analytics, and stress testing in a consistent analytical framework.
-
-The analysis uses seven core tables representing a consumer installment lending product (“CICA Prime”):
+The raw dataset spans January 2023 through December 2025, representing a full three-year consumer installment lending lifecycle across 7 tables.
 
 **customers**
-- One row per customer
-- Contains signup_date, acquisition channel, risk_tier_at_signup, and demographic buckets (income_band, region, age_band)
-- Used to define customer cohorts, segment performance, and build customer-level features for LTV / churn / PD modeling
+One row per customer — signup date, acquisition channel, risk tier, and demographic buckets
 
 **applications**
-- One row per credit application
-- Contains application date, approval/decline decision, approved amount, and a synthetic decision_score with reason codes for declines
-- Used to analyze conversion funnels, approval rates, underwriting shifts over time, and credit policy tightening/loosening
+One row per credit application — approval decisions, approved amounts, and decision scores
 
 **loans**
-- One row per booked loan
-- Contains origination details (principal, term_months, apr, origination fees), merchant category, and lifecycle outcomes (loan_status, default_date)
-- Used as the central table for portfolio analytics, risk segmentation, PD/LGD/EAD construction, and cohort/vintage analysis
+One row per booked loan — origination details, loan terms, and lifecycle outcomes including defaults
 
 **payment_schedule**
-- One row per contractual installment
-- Contains due_date and the contractual split between due_principal and due_fee_interest, plus scheduled remaining balance
-- Used to measure scheduled cash flows, delinquency timing, and to establish the “what should have happened” baseline for forecasting and variance analysis
+One row per contractual installment — scheduled due dates and amounts
 
 **payments**
-- One row per cash event
-- Contains payment_date, payment_amount, split between paid_principal and paid_fee_interest, plus payment_type (scheduled, partial, refund, recovery)
-- Used to measure actual cash collections, revenue realized through fees/interest, delinquency behavior, recoveries after default, and net loss outcomes
+One row per cash event — actual collections, payment types, and recoveries
 
 **macro_monthly**
-- One row per month per scenario
-- Contains monthly macro indexes (unemployment_index, rates_index, consumer_stress_index) for baseline, adverse, and severe scenarios
-- Used for stress testing, scenario comparison, and macro-driven sensitivity analysis of delinquency/default behavior and portfolio losses
+Monthly macro indexes across baseline, adverse, and severe scenarios for stress testing
 
 **budget_plan_monthly**
-- One row per month per plan scenario
-- Contains planned originations, cash inflow, revenue, and net losses under base vs stretch plans
-- Used for budget vs actual variance modeling, planning accuracy evaluation, and “what management expected vs what happened” analysis
+Monthly planned originations, cash inflow, revenue, and net losses under base and stretch plans
 
-**dim_month**
-- Calendar spine to help with time series modeling.
-- This is an additional "tool" to help with the calculation. Not data in itself.
 
 <br><br>
 
