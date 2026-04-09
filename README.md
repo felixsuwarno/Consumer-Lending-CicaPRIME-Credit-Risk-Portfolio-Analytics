@@ -103,23 +103,6 @@ Is the lending business financially stable and predictable?
 
 How did total portfolio interest and fee revenue perform on a monthly basis from 2023 through 2025, and what is the expected monthly revenue performance over the next 12 months?
 
-**Tables used**
-- payments
-- dim_month ( the calendar spine )
-
-**SQL Method**
-- Filter gross revenue ( **paid_fee_interest** ) for all **payment_type** labeled **scheduled** or **partial**.
-- Aggregate monthly realized interest and fee revenue using **payment_date**, converted to a **year_month** configuration.
-- Left join to a calendar spine to ensure zero-revenue months are included.
-- SQL Output : a simple table with two columns, **year_month** and **gross_revenue**.
-
-**Python Method**
-- Load the monthly revenue output from SQL and index it by `year_month` as a monthly time series (`.asfreq("MS")`).
-- Run STL decomposition (`period=12`) and plot the trend, seasonal, and residual components to diagnose revenue structure.
-- Fit the historical monthly revenue series into a seasonal SARIMA model to capture short-term dynamics and yearly seasonality.
-- Generate a 12-month forecast and extract the forecast table (`mean`, `mean_ci_lower`, `mean_ci_upper`).
-- Plot actual vs forecast and shade the confidence interval to visually communicate expected trajectory and uncertainty.
-
 <br>
 
 **Charts**
@@ -149,23 +132,6 @@ All revenue figures reflect cash actually collected from borrowers, ensuring ali
 How do actual cash collections compare to scheduled payments on a monthly basis from 2023 through 2025?
 How stable / reliable are monthly collection gaps across this period?
 
-**Tables used**
-- **payment_schedule** , contractual principal and interest due
-- **payments** , actual cash collected
-- **dim_month** ( the calendar spine )
-
-**SQL Method**
-- Aggregate monthly scheduled cash flows from **payment_schedule**.
-- Aggregate monthly actual cash flows from payments.
-- Align both series on the same monthly calendar spine.
-- Compute monthly cash collection gaps -> gap amount = actual − scheduled
-- SQL output: one clean monthly table with columns(**year_month**, **scheduled_cash**, **actual_cash**, **cash_flow_gap**)
-
-**Python Method**
-- Load the monthly table that shows how much cash was expected and how much cash was actually collected for each month.
-- For each month, calculate the cash gap percentage by dividing the difference between actual and expected cash by the expected cash.
-- Summarize the results by reporting the average gap percentage, how much the gap percentage varies from month to month, and how often monthly cash collection is below expectations.
-- Plot the monthly cash gap percentage over time and label each month with its exact value so the chart is easy to read.
 
 <br>
 
@@ -189,67 +155,6 @@ How stable / reliable are monthly collection gaps across this period?
 **1.3. Budget vs Actual Performance**
 
 Did actual revenue earned, cash collected, and credit losses differ from what management planned?
-
-<br>
-
-**Tables used**
-- budget_plan_monthly — planned revenue ($), cash inflow ($), net credit loss ($) by month + scenario
-- payments — actual cash received and realized interest+fees
-- loans — default event timing (only for labeling / cohorting if needed)
-- calendar spine
-
-<br>
-
-**SQL Method :** <br>
-This work produces three tables.
-
-**Actual Revenue:**
-- **Identify realized revenue cashflows:** Use the payments table and keep only rows where **payment_type** IN ('scheduled','**partial**') so revenue reflects interest/fees actually collected.
-- **Aggregate to monthly revenue:** Group by **payment_date** month and sum **paid_fee_interest** to produce **actual_revenue** by year_month.
-- **Preserve missing months:** Left join the monthly revenue series to **dim_month** on **month_start** so every month appears even when revenue is zero, and fill missing months with 0.
-- **Output the revenue table:** Return **year_month** and **actual_revenue** ordered by **year_month**. 
-
-**Actual Cash:**
-- **Identify all cash collected:** Use the payments table and include all payment rows so this metric captures total cash inflow, not just revenue.
-- **Aggregate to monthly cash:** Group by **payment_date** month and sum **payment_amount** to produce **actual_cash** by year_month.
-- **Preserve missing months:** Left join the monthly cash series to **dim_month** on month_start so every month appears even when cash is zero, and fill missing months with 0.
-- **Output the cash table:** Return **year_month** and **actual_cash** ordered by **year_month**.
-
-**Actual Net Credit Loss:**
-- **Identify default events:** Filter loans to only defaulted loans where **default_date** IS NOT NULL so losses are tied to actual defaults.
-- **Measure unpaid principal at default:** Left join defaulted loans to payments on loan_id and keep only payments with **payment_date** <= **default_date**, then sum paid_principal for **payment_type** IN ('**scheduled**','**partial**') to compute **principal_paid_pre_default**.
-- **Aggregate monthly principal loss:** For each defaulted loan compute principal - **principal_paid_pre_default** and sum by the month of default_date to produce **actual_loss_unpaid_principal** by year_month.
-- **Preserve missing months for loss:** Left join monthly principal loss to **dim_month** so every month appears, and fill missing months with 0.
-- **Measure monthly recoveries:** From payments, filter to **payment_type** = **'recovery'** and sum **payment_amount** by month to produce **actual_loss_recovered_principal**.
-- **Compute monthly net loss:** For each month compute **actual_loss** = **actual_loss_unpaid_principal** - **actual_loss_recovered_principal**, using 0 for missing recoveries, and output **year_month** and **actual_loss** ordered by month.
-
-<br>
-
-**Python Method :**
-
-**Budget vs Actual Revenue:**
-- Load monthly actual revenue and monthly budget plan data, and convert the month fields into real dates so the timeline is consistent.
-- Align both datasets to a monthly calendar index so every month exists in order, then fill missing actual revenue months with 0 so “no activity” is treated as 0.
-- Build two budget revenue series (Base and Stretch) by filtering the budget data by scenario and aggregating planned revenue per month, then join them side-by-side.
-- Join actual revenue to the two budget revenue series by month so each month has Actual, Budget(Base), and Budget(Stretch).
-- Compute variance in dollars (Actual − Budget) and variance percent ((Actual − Budget) ÷ Budget) for both Base and Stretch, treating 0-budget months as undefined percent variance.
-- Plot a two-panel chart: top panel shows Actual vs Base vs Stretch in dollars; bottom panel shows monthly variance percent vs Base and Stretch with a zero line.
-
-**Budget vs Actual Cash:**
-- Load monthly actual cash and monthly budget plan data, and convert the month fields into real dates so the timeline is consistent.
-- Align both datasets to a monthly calendar index so every month exists in order, then fill missing actual cash months with 0 so “no activity” is treated as 0.
-- Build two budget cash series (Base and Stretch) by filtering the budget data by scenario and aggregating planned cash inflow per month, then join them side-by-side.
-- Join actual cash to the two budget cash series by month so each month has Actual, Budget(Base), and Budget(Stretch).
-- Compute variance in dollars (Actual − Budget) and variance percent ((Actual − Budget) ÷ Budget) for both Base and Stretch, treating 0-budget months as undefined percent variance.
-- Plot a two-panel chart: top panel shows Actual vs Base vs Stretch in dollars; bottom panel shows monthly variance percent vs Base and Stretch with a zero line.
-
-**Budget vs Actual Net Credit Loss:**
-- Load monthly actual net credit loss and monthly budget plan data, and convert the month fields into real dates so the timeline is consistent.
-- Align both datasets to a monthly calendar index so every month exists in order, then fill missing actual loss months with 0 so “no loss recorded” is treated as 0.
-- Build two budget loss series (Base and Stretch) by filtering the budget data by scenario and aggregating planned net losses per month, then join them side-by-side.
-- Join actual loss to the two budget loss series by month so each month has Actual, Budget(Base), and Budget(Stretch).
-- Compute variance in dollars (Actual − Budget) and variance percent ((Actual − Budget) ÷ Budget) for both Base and Stretch, treating 0-budget months as undefined percent variance; interpret positive variance as “losses worse than plan.”
-- Plot a two-panel chart: top panel shows Actual vs Base vs Stretch in dollars; bottom panel shows monthly variance percent vs Base and Stretch with a zero line.
 
 <br>
 
@@ -301,62 +206,6 @@ Did borrowers begin falling behind on payments before credit losses increased sh
 
 <br>
 
-**Tables used**
-- payment_schedule
-- payments
-- loans
-- dim_month
-
-<br>
-
-**SQL Method**
-
-To create the required table, the process is complex. Therefore, the SQL logic was separated into four sequential scripts. Each script must be executed in order. This approach mimics how real banks structure data pipelines. Breaking the logic into smaller steps reduces cognitive load, makes debugging easier, and allows each stage to be verified independently.
-
-**01_4a — Scheduled Payment Plan**
-- Build a month-end calendar from **dim_month** so each reporting month has a consistent **month_end** date.
-- Join **payment_schedule** to the calendar using **due_date** <= **month_end** so each installment is counted once it becomes due.
-- Aggregate to one row per **loan_id** + **month_end** and sum **due_total** to compute **due_at_month_end**.
-- Output the cumulative contractual amount that should have been paid by each month-end.
-
-**01_4b — Collected Payments**
-- Build a month-end calendar from **dim_month**.
-- Clean payments at the daily level: Keep **scheduled** and **partial** as positive and then convert **refund** to negative.
-- Join cleaned payments to month-end using **payment_date** <= **month_end** so payments accumulate through time.
-- Aggregate to one row per **loan_id** + **month_end** and sum as **paid_at_month_end**.
-- Output the cumulative cash actually paid by each month-end.
-
-**01_4c — Delinquency at Month-End**
-- Join **scheduled** vs **paid** tables at **loan_id** + **month_end**.
-- Compute **unpaid_at_month_end** as **due_at_month_end** − **paid_at_month_end**, floored at zero.
-- For loans with unpaid balance, join back to payment_schedule to identify all due installments on or before month_end.
-- For each loan-month, compute **oldest_unpaid_due_date** using MIN(due_date).
-- Calculate dpd_days as the difference between **month_end** and **oldest_unpaid_due_date**.
-- Assign **dpd_bucket** based on **dpd_days** (Current, 1–29, 30–59, 60–89, 90+).
-- Output one clean loan-level delinquency snapshot per month-end.
-
-**01_4d — Portfolio Delinquency Trend**
-- Aggregate **01_4c_delinquency_at_month_end** by year_month:
-  - Count total active loans.
-  - Count loans in each DPD bucket.
-- Compute **dpd_30_plus_rate** as (30–59 + 60–89 + 90+) divided by total active loans.
-- Separately aggregate loans to count defaulted_loans by default month.
-- Join delinquency metrics to monthly defaults.
-- Output one monthly portfolio table showing delinquency trend and default trend side-by-side.
-
-<br>
-
-**Python Method**
-
-- **Load the monthly trend dataset:** Read 01_4d_portfolio_delinquency_trend.csv, parse year_month as a date, sort by time, and set year_month as the time index so each row represents one month.
-- **Standardize column names for stability:** Normalize column names (trim spaces, lowercase, replace spaces with underscores) so later steps do not break due to formatting differences.
-- **Normalize the 30+ delinquency metric:** Identify the DPD 30+ rate column and convert it into a consistent percentage series so it is comparable month to month.
-- **Smooth the signals for trend reading:** Compute a 3-month rolling average for DPD 30+ rate and for monthly defaulted loans to reduce noise and make the direction of change easier to see.
-- **Convert bucket counts into portfolio mix shares:** If delinquency bucket count columns exist (Current, 1–29, 30–59, 60–89, 90+), divide each bucket by active_loans to create bucket share percentages for portfolio mix tracking.
-- **Test whether delinquency leads defaults:** Run a lead/lag correlation check across multiple month lags to measure whether increases in DPD 30+ tend to show up before increases in defaults, and estimate the typical lead time in months.
-
-<br>
-
 **Charts**
 
 <p align="center">
@@ -402,20 +251,6 @@ Which customers create value and which ones stop borrowing?
 **2.1. Customer Activation Timing**
 
 How long does it take customers to activate into credit usage by originating their first loan?
-
-**Tables used**
-- customers — signup date and segmentation attributes
-- loans — first loan origination date
-- dim_month ( the calendar spine )
-
-**SQL Method**
-- **Identify first credit usage**: Join loans to customers and, for each customer, find the earliest loan origination date that occurs on or after the signup date. This ensures activation reflects the first valid use of credit.
-- **Measure activation delay**: Calculate activation time as the number of days between customer signup and first loan origination.
-- **Summarize by cohort**: Group customers by signup month and compute the average and median activation days for each cohort to compare how quickly different signup cohorts activate into borrowing.
-- SQL output : a table with these columns : year_month, n_customers, avg_activation_days, median_activation_days
-
-**Python Method**
-- Compute and visualize activation-time metrics by signup month, applying a cutoff defined as last month in the data minus 18 months so that only fully observable cohorts are included in trend analysis.
   
 <br>
 
@@ -439,31 +274,6 @@ How long does it take customers to activate into credit usage by originating the
 **2.2. Borrower Inactivity & Churn Risk**
 
 Which customers are likely to stop borrowing or become inactive after their initial loan?
-
-**Tables used**
-- customers — customer attributes
-- loans — loan timing and frequency
-
-**SQL Method**
-- The initial loan is defined as the earliest loan origination for each customer, ordered by origination date and loan ID.
-- **Order loans and set end date**: Assign a fixed portfolio end date (2025-12-31) and number each customer’s loans by origination date (and **loan_id** for ties) so we can consistently identify “first” and “second” loans.
-- **Isolate the first loan**: Keep only **loan_number** = 1 per customer to define the **first_loan_id** and **first_loan_date**, which anchors the customer’s borrowing start.
-- **Isolate the second loan**: Keep only **loan_number** = 2 per customer to capture the earliest “return borrowing” event (**second_loan_id**, **second_loan_date**) if it exists.
-- **Create the 180-day return window**: Join first and second loans and compute **daydate_180** = **first_loan_date** + 180 days to define the return window boundary.
-- **Apply an observability cutoff** (include_flag): Mark customers as included only if **daydate_180** is on or before 2025-12-31, so every included customer has a fully observable 180-day return window.
-- **Calculate inactivity score** :
-	- For customers who are not included the score is set to NULL
-	- For included customers who has no second loan, assign score = 1
-	- For included customers who has second loan which is within 180 days after the first loan, calculate score = days between loans ÷ 180
-	- For included customers who has second loan which is outside 180 days after the first loan, assign score = 1
-- **Output the modeling table** : Return one row per customer containing first/second loan timing, the 180-day window boundary, the include_flag, and the final inactive_score target for downstream Python work.
-
-**Python Method**
-- **Load the modeling table**: Read the SQL output (one row per borrowing customer) and keep only rows where inactive_score is not null so the target is fully observable.
-- **Validate the target**: Convert inactive_score to numeric and keep only valid values so summaries and plots do not break or misread the target.
-- **Measure portfolio-level full inactivity**: Compute the share of observable customers with inactive_score = 1.00 to quantify customers who did not return within 180 days.
-- **Summarize return timing distribution**: Describe and plot the distribution of inactive_score to separate the “fully inactive” mass at 1.00 from the return-timing spread among customers who came back within 180 days.
-- **Create outcome buckets for communication**: Bucket customers into Low/Medium/High groups using fixed thresholds on inactive_score so results are easy to explain and compare across segments.
 
 <br>
 
@@ -512,40 +322,6 @@ Which customers are likely to stop borrowing or become inactive after their init
 
 Which customer(s) are expected to generate the highest lifetime value after accounting for credit losses?
 
-**Tables used**
-- customers
-- loans
-- payments
-
-**SQL Method**
-Two tables are created for the purpose of this business question, to simplify the steps.
-
-**02_3a_customer_LTV_180d**
-This is done first, to process and prepare necessary data and generate base table for LTV calculations.
-
-- **Extract the loan population:** Pull one row per loan with core contract fields (**customer_id**, **loan_id**, **origination_date**, **principal**, **default_date**) to define the exposure base.
-- **Filter valid payment events:** Keep only cash-collection payment types (**scheduled**, **partial**) so LTV reflects real collected cash.
-- **Combine loans with payments:** Left join loans to payments so every loan remains in the dataset, including those with no payments.
-- **Apply a 180-day observation window:** Create a cutoff date equal to origination date plus 180 days and retain only payments occurring within this window, while keeping loans with no payments.
-- **Flag defaults within the window:** Mark loans as defaulted only if **default_date** exists and falls within the 180-day period.
-- **Compute cumulative cash and principal per loan:** For each loan, calculate running totals of collected cash and principal repaid within the 180-day window, and assign a row number to identify the final event snapshot.
-- **Select one 180-day snapshot per loan:** Keep only the final row per loan so each loan is represented once at the end of the 180-day period.
-- **Calculate unpaid principal and credit loss:** Compute outstanding principal at 180 days and recognize it as loss only if the loan defaulted within the window.
-- **Aggregate to the customer level:** Sum 180-day payments and losses across all loans per customer and compute net LTV as payments minus losses, then rank customers by net value.
-
-**02_3b_customer_LTV_180d_summary**
-This query summarizes the LTV data into a set of statistics that are easier to read and compare.
-
-- **Split customers into 5 equal-sized LTV groups:** Sort customers by net_ltv_180d from highest to lowest and assign each customer to a bucket (1–5) using NTILE(5), where each bucket represents about 20% of customers.
-- **Summarize value and loss by bucket:** For each bucket, compute customer count plus key statistics for payments, losses, and net LTV, including averages, minimum/maximum net LTV, and total sums, rounding outputs to 2 decimals for clean reporting.
-- **Return bucket results in order:** Output the bucket-level summary table ordered from bucket 1 to bucket 5 for easy comparison across tiers.
-  
-**Python Method**
-- **Load the LTV segment summary table:** Read 02_3b_customer_LTV_180d_summary.csv into a dataframe so each row represents one customer value group created from the SQL NTILE segmentation.
-- **Rename segment labels for reporting:** Map the numeric segment groups (1–5) to descriptive customer value segments: Top Value Customers, High Value Customers, Mid Value Customers, Low Value Customers, Negative / Minimal Value Customers so the results are easier to interpret in a business report.
-- **Prepare the reporting table:** Select the segment name and average 180-day LTV column, rename the metric to avg_ltv, and sort the segments in logical descending value order.
-- **Print the segment summary:** Format the output as a simple table showing Segment and Average LTV, with currency formatting for readability.
-
 <br>
 
 <p align="center">
@@ -559,17 +335,6 @@ All customer segments generate positive average LTV. Even the lowest segment pro
 
 **2.4. Value Concentration**
 How concentrated is customer value, and how dependent is portfolio performance on top-value segments?
-
-**Tables used**
-02_3a_customer_LTV_180d.csv, generated for business question 2.3.
-
-- **Rank customers from highest value to lowest value:** Sort customers by **net_ltv_180d** in descending order, assign each a rank, divide the rank by total customers and multiply by 100 to produce the cumulative percentage of customers, which becomes the X-axis of the Pareto curve.
-- **Build a running total of value:** Starting from the highest-value customer, add **net_ltv_180d** row by row down the ranked list to create a cumulative total showing how portfolio value builds across customers.
-- **Convert cumulative value into percentage of total portfolio value:** Divide the cumulative total by total portfolio **net_ltv_180d** and multiply by 100 to calculate the cumulative percentage of value, which becomes the Y-axis of the Pareto curve.
-- **Output the value concentration table:** Return customer-level **net_ltv_180d**, cumulative % of customers (**pareto_x**), and cumulative % of portfolio value (**pareto_y**), ordered from highest to lowest **net_ltv_180d**.
-
-**Python Method**
-- Python is not used to process the data further. It is only used to directly visualize the chart.
 
 <br>
 
@@ -638,29 +403,6 @@ The rules and definition :
 **Data Quality Notes (Rule-Based Handling)**
 - Loans without required schedule data to compute DPD are excluded from the eligible set (data-quality exception).
 - Early payoff does not count as default unless the loan already crossed 90+ DPD before payoff.
-
-<br>
-
-**Tables used :**
-- loans
-- customers
-
-<br>
-
-**SQL Methods :**
-- **Add origination month label:** Create **origination_month** by truncating **origination_date** to the first day of its month so all loans from the same month group together.
-- **Attach customer risk tier:** Join the loans to the customers table using **customer_id** so each loan carries **risk_tier_at_signup** for risk segmentation.
-- **Flag 12-month observability:** Create **is_pd_eligible** by marking loans as 1 only when the loan’s **origination_date** is on or before DATE '2024-12-31', meaning a full 12 months can be observed in the dataset.
-- **Flag default within 12 months:** Create **is_default_12m** by marking 1 when **default_date** exists and occurs on or before origination_date + INTERVAL '12 months', otherwise 0.
-- **Final Output:** One row per loan with: **loan_id** , **customer_id** , **origination_date** , **origination_month** , **default_date** , **risk_tier_at_signup** , **is_pd_eligible** , **is_default_12m**
-
-<br>
-
-**Python Methods :**
-- **Keep only “eligible” loans:** Only include loans marked is_pd_eligible = 1, because those loans had enough time to see whether they default within 12 months.
-- **Overall 12M PD:** Count how many eligible loans defaulted within 12 months, then divide by how many eligible loans exist.
-- **PD by risk tier:** Do the same PD calculation separately for each **risk_tier_at_signup** to see if higher-risk tiers actually default more.
-- **PD by origination month (vintage):** Do the same PD calculation separately for each origination_month to see if newer cohorts are getting riskier or safer over time.
 
 <br>
 
@@ -828,25 +570,6 @@ The rules and definition :
 
 <br>
 
-**SQL Methods :**
-- **Prepare principal payment data:** Select **loan_id**, **payment_date**, and **paid_principal** from the **payments** table so only the fields required for recovery measurement are carried forward.
-- **Attach payments to defaulted exposures:** Left join the EAD table to the prepared payments table on **loan_id** so each defaulted loan is aligned with all its payment records.
-- **Identify post-default recoveries:** Keep only rows where **payment_date** is strictly after **default_date**, while preserving **NULL** payment rows so loans with zero recovery remain in the dataset.
-- **Aggregate recoveries to loan level:** Group by **loan_id** and sum **paid_principal** to compute **recovered_principal_after_default** so each defaulted loan has one consolidated recovery value.
-- **Calculate loan-level principal loss:** Subtract **recovered_principal_after_default** from **principal_unpaid_on_default** and apply GREATEST(..., 0) to floor negative values at zero so recoveries cannot create artificial gains.
-- **Compute loan-level LGD rate:** Divide **principal_loss** by **principal_unpaid_on_default** and round to two decimals so each loan has a percentage loss measure; exclude loans where **principal_unpaid_on_default** equals zero to prevent invalid ratios.
-- **Order final LGD output by vintage:** Sort the result by **year_month** so the dataset is ready for vintage-level aggregation and reporting.
-- **Output the LGD table:** Return **loan_id**, **year_month**, **risk_tier_at_signup**, **principal_unpaid_on_default**, **recovered_principal_after_default**, **principal_loss**, and **lgd_rate** ordered by year_month so each row represents one defaulted loan with its realized loss profile.
-
-<br>
-
-**Python Methods :**
-- **Load the LGD dataset:** and then parse the vintage date column, convert **origination_month** to a datetime type so monthly grouping and sorting work correctly.
-- **Summarize LGD by risk tier:** Group by **risk_tier_at_signup** and compute total **principal_loss** divided by total **principal_unpaid_on_default** so the result is exposure-weighted LGD per tier, and include a **defaulted_loan_count** to show how many loans drive each tier result.
-- **Summarize LGD by vintage:** Group by **origination_month** and compute total principal_loss divided by total **principal_unpaid_on_default** so the result is exposure-weighted LGD per month, and include a **defaulted_loan_count** to show how many loans drive each month result.
-
-<br>
-
 <p align="center">
   <img src="Charts/03_3a_lgd_by_risk_tier.png" style="width:100%;">
 </p
@@ -889,19 +612,6 @@ For the purpose of answering this business question, there will be three separat
 **3.4A. Cumulative Default Rate Table**  
 A cumulative default table shows, for each group of loans that started in the same month, what percentage of those loans have defaulted by a specific point in time, such as 12 months after they began. It measures how many loans have failed out of the original group and expresses that as a rate, so we can compare how different groups performed over the same time period.
 
-**SQL Methods :**
-- **Pick the loans we are allowed to measure:** Filter loans to origination dates in 2023–2024 only, and keep one row per loan with **loan_id**, **origination_month**, and **default_month** so each loan has a start month and a possible default date.
-- **Set the 12-month check date:** Add mob12 as **origination_month** + INTERVAL '12 months' so each loan has a clear “first birthday” date when we check if it failed.
-- **Mark whether the loan failed in its first year:** Create **is_default_12m** equal to 1 if **default_month** is not NULL and **default_month** <= **mob12**, otherwise 0.
-- **Count how many loans started and how many failed:** Group **cdt_is_default_12m** by **origination_month**.
-  - Add **n_loans_in_vintage** as the count of **loan_id**.
-  - Add **n_default_12m_loans** as the sum of **is_default_12m**.
-- **Calculate the first-year failure percentage:** Create **cdr_12m** as **n_default_12m_loans** / **n_loans_in_vintage**.
-- **Show the final table:** **origination_month**, **n_loans_in_vintage**, **n_default_12m_loans**, **cdr_12m**.
-
-**Python Methods :**
-- Python is used to visualize the chart, no further processing is necessary.
-
 <br>
 
 <p align="center">
@@ -918,20 +628,6 @@ A cumulative default table shows, for each group of loans that started in the sa
 
 **3.4B. Cumulative Loss Rate Table**  
 A cumulative loss table shows, for each group of loans that started in the same month, how much money was lost from those loans by a specific point in time, such as 12 months after they began. It measures the total unpaid balance from loans that defaulted within that period and expresses it relative to the original group, so we can compare how severe the losses were across different vintages over the same time horizon.
-
-**SQL Methods :**
-- **Pick the loans we are allowed to measure:** Filter loans to origination dates in 2023–2024 only, and keep one row per loan with **loan_id**, **origination_month**, and **default_month** so each loan has a start month and a possible default date.
-- **Bring in the unpaid balance at default:** Left join the output table from **Business Question 3.2 — Exposure at Default (EAD)**, specifically the table `"03_2_exposure_at_default"`, and take the column **principal_unpaid_on_default** so each loan has the unpaid principal amount calculated at default.
-- **Set the 12-month check date:** Add **mob12** as **origination_month** + INTERVAL '12 months' so each loan has a clear “first birthday” date when we check if it defaulted within 12 months.
-- **Compute first-year loss per loan:** Create **loss_12m** equal to **principal_unpaid_on_default** if **default_month** is not NULL and **default_month** <= **mob12**, otherwise 0.
-- **Sum how much loss happened in each vintage:** Group by **origination_month**.
-  - Add **n_loans_in_vintage** as the count of **loan_id**.
-  - Add **total_loss_12m** as the sum of **loss_12m**.
-- **Calculate the first-year cumulative loss per loan:** Create **clr_12m** as **total_loss_12m** / **n_loans_in_vintage**.
-- **Show the final table:** **origination_month**, **n_loans_in_vintage**, **total_loss_12m**, **clr_12m**.
-
-**Python Methods :**
-- Python is used to visualize the chart, no further processing is necessary.
 
 <br>
 
@@ -950,62 +646,6 @@ A cumulative loss table shows, for each group of loans that started in the same 
 
 **3.4C. Bucketed Delinquency Snapshot Table**  
 A Bucketed Delinquency Snapshot table shows, for each loan within a group that started in the same month, how far behind on payments that loan was at specific points in time, such as 11 and 12 months after origination. Instead of showing the exact number of days late, the table groups loans into clear categories like current, 1–29 days past due, 30–59 days past due, 60–89 days past due, or 90+ days past due. This allows us to see how payment status changed near the end of the first year and compare delinquency patterns across different origination months.
-
-The steps to generate this table is complex, therefore a procedure to reduce the complexity is implemented by dividing this into 6 tables.
-
-<br>
-
-**SQL Methods for 03_4c1_loan_snapshot_table :**
-- **Filter to the loans we’re allowed to measure** (keep only eligible loans for a fully observable first-year window): In **loans_filtered**, select **loan_id**, **term_months**, **origination_date**, and derive **origination_month** as the first day of the origination month. Filter to loans originated in 2023–2024 and with term_months ≥ 12, so every loan can be evaluated through MOB12.
-- **Create the MOB12 snapshot date** (define the end-of-first-year checkpoint): In **loan_snapshots**, carry forward the loan fields and compute **snapshot_date_mob12** as the last calendar day of month-on-book 12, so each loan has a single, consistent “end of first year” date for delinquency measurement.
-- **Finalize the loan snapshot output shape** (produce the clean loan-level snapshot table for downstream joins): In **loan_snapshots_output**, keep only **loan_id**, **term_months**, **origination_date**, **origination_month**, and **snapshot_date_mob12**, so all later steps join to one consistent loan snapshot dataset.
-
-<br>
-
-**SQL Methods for 03_4c2_contractual_payment_schedule_table :**
-- **Keep only the contractual payment schedule fields we need** (one clean row per installment): In **payment_schedule_prep**, select **loan_id**, **installment_no**, **due_date**, and **due_total** from **payment_schedule**, ordered by **loan_id** and **installment_no**, so each row represents one scheduled installment.
-- **Compute cumulative scheduled payment per loan** (calculate how much should be paid up to each installment): In **payment_schedule_add_cumulative**, carry forward the installment fields and compute **cumulative_scheduled_payment** as the running total of **due_total** within each **loan_id**, ordered by **due_date** and **installment_no**, so each installment has the total scheduled amount due up to that point.
-- **Finalize the contractual schedule output shape** (produce the table used downstream for snapshot comparisons): In **payment_schedule_add_cumulative_output**, keep **loan_id**, **installment_no**, **due_date**, **due_total**, and **cumulative_scheduled_payment**, ordered by **loan_id** and **installment_no**, so the schedule is ready to join to loan snapshots and compute delinquency.
-
-<br>
-
-**SQL Methods for 03_4c3_cumulative_scheduled_payment_at_snapshots_table :**
-- **Attach installment-level scheduled cumulative amounts to each loan snapshot** (prepare one row per loan per installment with scheduled totals): In **lps_JOIN_installments**, join cica_prime."**03_4c1_loan_snapshot_table**" to cica_prime."**03_4c2_contractual_payment_schedule_table**" on **loan_id**, keeping the loan snapshot fields (**loan_id**, **term_months**, **origination_date**, **origination_month**, **snapshot_date_mob12**) together with **installment_no** and **cumulative_scheduled_payment**, so each loan-installment row includes the running scheduled amount.
-- **Extract the scheduled cumulative amount due by MOB12** (collapse installment rows into one row per loan at the end-of-first-year checkpoint): In **lps_AGG_scheduled_payment_due_at_snapshots**, group to one row per loan using the loan snapshot fields, and set **scheduled_cumulative_pay_mob12** to the cumulative scheduled amount at **installment_no** = 12, so each loan has the total scheduled amount due by MOB12.
-
-<br>
-
-**SQL Methods for 03_4c4_cumulative_paid_at_snapshots_table :**
-- **Attach all payment records to each loan snapshot** (prepare loan-level data with full payment history): In **loans_JOIN_payments**, left join "**03_4c1_loan_snapshot_table**" to payments on **loan_id**, keeping the loan snapshot fields (**loan_id**, **term_months**, **origination_date**, **origination_month**, **snapshot_date_mob12**) together with **payment_date** and **payment_amount**, so each loan row includes all payments made over time.
-- **Calculate total amount paid by MOB12** (reduce to one row per loan with paid-to-date measure): In **lp_AGG_paid_to_date_at_snapshots**, group to one row per loan using the loan snapshot fields and compute cumulative_paid_mob12 as the total of **payment_amount** for payments made on or before **snapshot_date_mob12**, so each loan has the cumulative amount actually paid by the end of its first year.
-    
-<br>
-
-**SQL Methods for 03_4c5_dpd_at_snapshots_table :**
-- **Join loan snapshots to installment-level scheduled amounts and paid-to-date at MOB12** (build the loan–installment base for delinquency detection): In **loans_JOIN_payment_scheduled_JOIN_cumulative_paid_snapshot**, join "**03_4c1_loan_snapshot_table**" to "**03_4c2_contractual_payment_schedule_table**" on **loan_id**, then join "**03_4c4_cumulative_paid_at_snapshots_table**" on **loan_id**, keeping the loan fields plus **installment_no**, **due_date**, **scheduled_cumulative**, and **cumulative_paid_mob12**, so each installment row can be evaluated against what the borrower has paid by MOB12.
-- **Find the first unpaid installment due date by MOB12** (identify the earliest missed due date): In **first_unpaid_per_loan**, group to one row per loan using the loan snapshot fields and set **first_unpaid_due_date_mob12** to the earliest due_date where scheduled_cumulative is greater than **cumulative_paid_mob12**, so each loan has the first contractual due date that is not fully covered by payments as of MOB12.
-- **Convert first unpaid due date into Days Past Due at MOB12** (turn delinquency into a numeric measure): In **dpd_at_snapshots**, compute **days_past_due_mob12** as 0 when there is no unpaid installment by MOB12, otherwise the number of days between **snapshot_date_mob12** and **first_unpaid_due_date_mob12**, so each loan ends with a single MOB12 DPD value for bucket assignment.
-    
-<br>
-
-**SQL Methods for 03_4c6_bucketed_delinquency_snapshot_table :**
-- **Prepare MOB12 delinquency values for bucketing** (standardize DPD to a clean non-negative number): In **bucketed_delinquency**, select **loan_id** and set **vintage_month** from **origination_month**, then create dpd_mob12 by converting null DPD to 0 and forcing any negative values to 0, so every loan has a valid MOB12 days-past-due value.
-- **Assign each loan to a MOB12 delinquency bucket** (convert numeric DPD into a categorical risk stage): In the same CTE, map dpd_mob12 into:<br>
-	- 00_current for 0 days past due,
- 	- 01_1_29 for 1–29 days,
-  	- 02_30_59 for 30–59 days,
-  	- 03_60_89 for 60–89 days,
-  	- 04_90_plus for 90+ days, so each loan has a single MOB12 delinquency state for vintage-level performance reporting.
-- **Output the final bucketed delinquency snapshot table** (one row per loan ready for vintage rollups): Output **loan_id**, **vintage_month**, **dpd_mob12**, **mob12_dpd_bucket**, ordered by vintage_month and loan_id, so the dataset can be aggregated by vintage to show end-of-first-year risk composition.
-
-<br>
-
-**Python Methods :**
-- **Count loans per vintage and bucket** (build numerator): Group by **vintage_month** and **mob12_dpd_bucket**, count **loan_id**, and store as **n_loans**.
-- **Count total loans per vintage** (build denominator): Group by **vintage_month**, count **loan_id**, and store as **n_total**.
-- **Compute share within each vintage** (risk composition measure): Merge counts with totals and compute: **pct** = **n_loans** / **n_total** so each bucket becomes a percentage of that vintage.
-- **Create a full vintage × bucket grid** (avoid missing rows): Cross-join all vintages with all 5 buckets so that even buckets with zero loans appear explicitly.
-- **Produce final composition table** (plot-ready dataset): Merge the grid with computed counts and percentages, fill missing values with zero, and sort by vintage and bucket order.
 
 <p align="center">
   <img src="Charts/03_4c_bucketed_delinquency_snapshot.png" style="width:100%;">
@@ -1051,25 +691,6 @@ If you can prevent 1–29 day late loans from becoming 30–59 days late, you re
 **3.5. Decision Score Effectiveness**
 
 How well does the current decision score predict which borrowers are more likely to default within 12 months?
-
-**SQL methods :**
-
-- Filter applications table to keep only score data: Reduce applications to only the fields needed for this analysis and remove rows without a score. Keep application_id and decision_score.
-- Filter loans table, enforce full 12-month observation window, and create the 12-month default outcome flag: Reduce loans to only the columns needed for the analysis and ensure every loan had enough time to default within 12 months.
-  - Keep only loan_id, application_id, origination_date, and default_date.
-  - Keep only loans in 2023 and 2024 ( omit every loan in 2025 ) so each loan has a full 12-month observation window in the 2023–2025 dataset.
-  - Create defaulted_12m : Set the value to 1 if the loan defaulted within 12 months of origination, otherwise set it to 0. A loan counts as defaulted within 12 months only when default_date exists and occurs within 12 months after origination_date.
-- Join scored applications to originated loans: Join the filtered application table to the filtered loan table on application_id to bring together loan_id, decision_score, and defaulted_12m.
-- Create decision score buckets for risk comparison: Generate score_band by grouping the numeric decision score into ordered score ranges (for example deciles or fixed score intervals).
-- Aggregate score band performance: 
-  - Group the dataset by score_band 
-  - create loan_count as the number of loans in each score band 
-  - create defaults_12m_count as the total number of loans that defaulted within 12 months in each score band.
-  - Create default_rate_12m as defaults_12m_count / loan_count.
-  - Create score_band_rank so the results sort from lowest score band (highest risk) to highest score band (lowest risk).
-
-**Python methods :**
-- None, python is used to visualize the chart without further data modeling steps.
 
 <p align="center">
   <img src="Charts/03_5_decision_score_effectiveness.png" style="width:100%;">
